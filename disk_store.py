@@ -19,10 +19,11 @@ Typical usage example:
     # it also supports dictionary style API too:
     disk["hamlet"] = "shakespeare"
 """
+
 import os.path
 import time
-import typing
 
+from constants import HEADER_SIZE
 from format import encode_kv, decode_kv, decode_header
 
 
@@ -64,16 +65,53 @@ class DiskStorage:
     """
 
     def __init__(self, file_name: str = "data.db"):
-        raise NotImplementedError
+        open(file_name, "a").close()
+
+        self.file_store = open(file_name, "rb+")
+        self.key_dir: dict[str, int] = {}
+        self.__init_db()
+
+    def __init_db(self):
+        self.file_store.seek(0, os.SEEK_END)
+        total_file_size = self.file_store.tell()
+        if total_file_size < 10:
+            return
+
+        current_file_pointer = 0
+        self.file_store.seek(current_file_pointer)
+        while current_file_pointer < total_file_size:
+            header_b = self.file_store.read(HEADER_SIZE)
+            timestamp, k_sz, v_sz = decode_header(header_b)
+            kv_data_b = self.file_store.read(k_sz + v_sz)
+            t, k, v = decode_kv(header_b + kv_data_b)
+            self.key_dir[k] = current_file_pointer
+            current_file_pointer = self.file_store.seek(
+                current_file_pointer + HEADER_SIZE + k_sz + v_sz
+            )
 
     def set(self, key: str, value: str) -> None:
-        raise NotImplementedError
+        self.file_store.seek(0, os.SEEK_END)
+        total_file_size_before_key_set = self.file_store.tell()
+        encoded_data = encode_kv(int(time.time()), key, value)
+        self.file_store.write(encoded_data[1])
+        # set the key dir with the key & the offset
+        self.key_dir[key] = total_file_size_before_key_set
 
     def get(self, key: str) -> str:
-        raise NotImplementedError
+        offset_to_jump_to = self.key_dir.get(key)
+        if offset_to_jump_to is None:
+            return ""
+
+        self.file_store.seek(offset_to_jump_to, 0)
+        header_b = self.file_store.read(HEADER_SIZE)
+        timestamp, key_size, value_size = decode_header(header_b)
+        self.file_store.seek(offset_to_jump_to + HEADER_SIZE, 0)
+        kv_data_b = self.file_store.read(key_size + value_size)
+        timestamp, k, v = decode_kv(header_b + kv_data_b)
+        return v
 
     def close(self) -> None:
-        raise NotImplementedError
+        self.file_store.close()
 
     def __setitem__(self, key: str, value: str) -> None:
         return self.set(key, value)

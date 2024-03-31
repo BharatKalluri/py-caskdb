@@ -130,3 +130,5 @@ dmypy.json
 
 # ignore all .db files
 *.db
+
+.idea

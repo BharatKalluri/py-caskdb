@@ -36,18 +36,35 @@ For the workshop, the functions will have the following signature:
     def decode_kv(data: bytes) -> tuple[int, str, str]
 """
 
+import struct
+import typing
+
+from constants import HEADER_SIZE
+
 
 def encode_header(timestamp: int, key_size: int, value_size: int) -> bytes:
-    raise NotImplementedError
+    return struct.pack("III", timestamp, key_size, value_size)
 
 
 def encode_kv(timestamp: int, key: str, value: str) -> tuple[int, bytes]:
-    raise NotImplementedError
+    record_in_bin = struct.pack(
+        "{}s{}s".format(len(key), len(value)), key.encode(), value.encode()
+    )
+    header = encode_header(
+        timestamp=timestamp, key_size=len(key), value_size=len(value)
+    )
+    record_with_header = header + record_in_bin
+    return len(record_with_header), record_with_header
 
 
 def decode_kv(data: bytes) -> tuple[int, str, str]:
-    raise NotImplementedError
+    timestamp, key_size, value_size = decode_header(data[:HEADER_SIZE])
+    key, value = struct.unpack(
+        "{}s{}s".format(key_size, value_size), data[HEADER_SIZE:]
+    )
+    return timestamp, key.decode(), value.decode()
 
 
 def decode_header(data: bytes) -> tuple[int, int, int]:
-    raise NotImplementedError
+    timestamp, key_size, value_size = struct.unpack("III", data)
+    return timestamp, key_size, value_size
